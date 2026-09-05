@@ -10,7 +10,25 @@ from phonenumbers import geocoder
 
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+# ---- RENDER ER PORT FIX KORAR JONNO NOTUN CODE ----
+from flask import Flask
+import threading
+import os
 
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    return "Bot is running perfectly!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    web_app.run(host="0.0.0.0", port=port)
+
+# Web server take background e chalu kora holo
+threading.Thread(target=run_web, daemon=True).start()
+# ---------------------------------------------------
+# ==========================================
 # ⚠️ ওনার আইডি এবং আপডেট করা বটের টোকেন
 BOT_TOKEN = "8919458173:AAFxKL0sE5xhVdQxRCf2aCLHwsHlOPICdTo"
 OWNER_ID = 8360805978
