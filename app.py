@@ -9,7 +9,6 @@ import html
 import threading
 import firebase_admin
 from firebase_admin import credentials, firestore
-
 # ---- RENDER ER PORT FIX KORAR JONNO NOTUN CODE ----
 from flask import Flask
 import threading
@@ -28,6 +27,7 @@ def run_web():
 # Web server take background e chalu kora holo
 threading.Thread(target=run_web, daemon=True).start()
 # ---------------------------------------------------
+
 # ==========================================
 # Configuration
 # ==========================================
@@ -84,7 +84,12 @@ def auto_cache_menu_thread():
                 row = []; styles = ["primary", "success", "danger"]; style_idx = 0
                 for sid, data, hits in top_services:
                     safe_sid = html.escape(str(sid))
-                    row.append({"text": safe_sid, "callback_data": f"srv_{safe_sid[:15]}", "style": styles[style_idx % 3], "icon_custom_emoji_id": data["emoji_id"]})
+                    
+                    # 🌟 BUG FIX: Emoji injected into standard text parameter
+                    emoji_icon = data.get("normal_emoji", "📱")
+                    btn_text = f"{emoji_icon} {safe_sid}".strip()
+                    
+                    row.append({"text": btn_text, "callback_data": f"srv_{safe_sid[:15]}", "style": styles[style_idx % 3], "icon_custom_emoji_id": data.get("emoji_id", "")})
                     style_idx += 1
                     if len(row) == 2: new_srv_kb["inline_keyboard"].append(row); row = []
                 if row: new_srv_kb["inline_keyboard"].append(row)
@@ -116,7 +121,8 @@ def auto_cache_menu_thread():
                         emoji_char = parts[0]
                         clean_name = parts[1] if len(parts) > 1 else c_name_full
                         
-                        btn_text = f"Other (+{c_code}) - {rate} TK" if "Other" in clean_name else f"{clean_name} (+{c_code}) - {rate} TK"
+                        # 🌟 BUG FIX: Flag Emoji is now prepended properly
+                        btn_text = f"{emoji_char} Other (+{c_code}) - {rate} TK" if "Other" in clean_name else f"{emoji_char} {clean_name} (+{c_code}) - {rate} TK"
                         btn = {"text": btn_text, "callback_data": f"cc_{safe_sid_short}_{c_code}", "style": styles_c[style_idx_c % 3]}
                         if emoji_char in GLOBAL_BODY_EMOJIS: btn["icon_custom_emoji_id"] = GLOBAL_BODY_EMOJIS[emoji_char]
                             
@@ -1236,7 +1242,9 @@ def dxa_otp_control_keyboard():
     # অ্যাড করা স্পেসিফিক সার্ভিস রেটগুলো ডায়নামিক ইনলাইন বাটন হিসেবে দেখানোর জন্য
     for srv_name, rate in bot_settings.get("otp_service_rates", {}).items():
         app_info = PREMIUM_APPS.get(srv_name, PREMIUM_APPS["Other"])
-        kb["inline_keyboard"].append([{"text": f"Delete: {srv_name} ({rate})", "icon_custom_emoji_id": app_info["id"], "callback_data": f"del_srv_rate_{srv_name}", "style": "danger"}])
+        
+        # 🌟 BUG FIX: Added emoji inside text for DXA control settings too
+        kb["inline_keyboard"].append([{"text": f"Delete: {app_info['emoji']} {srv_name} ({rate})", "icon_custom_emoji_id": app_info["id"], "callback_data": f"del_srv_rate_{srv_name}", "style": "danger"}])
         
     kb["inline_keyboard"].append([{"text": "BACK", "icon_custom_emoji_id": "5267490665117275176", "callback_data": "dxa_control", "style": "danger"}])
     return kb
@@ -1269,7 +1277,7 @@ def get_upload_firebase_keyboard():
     return {"inline_keyboard": [[{"text": "CANCEL", "callback_data": "back_to_admin", "icon_custom_emoji_id": "5420130255174145507", "style": "danger"}]]}
 
 def get_back_only_keyboard():
-    return {"inline_keyboard": [[{"text": "BACK", "callback_data": "user_cancel", "icon_custom_emoji_id": "5438541186539232243", "style": "danger"}]]}
+    return {"inline_keyboard": [[{"text": "BACK", "callback_data": "back_to_admin", "icon_custom_emoji_id": "5438541186539232243", "style": "danger"}]]}
 
 def get_leaderboard_keyboard():
     return {"inline_keyboard": [[{"text": "REFRESH", "callback_data": "refresh_leaderboard", "icon_custom_emoji_id": "5229111790842952353", "style": "success"}]]}
@@ -1512,8 +1520,8 @@ def handle_message(message):
         send_message(chat_id, fj_msg, reply_markup=get_force_join_alert_keyboard())
         return
 
-    # Handle Admin & User Input States
-    if user_id in user_states:
+    # Handle Admin Input States
+    if user_id == ADMIN_ID and user_id in user_states:
         state_data = user_states[user_id]
         if isinstance(state_data, dict):
             state = state_data.get("state")
@@ -1795,16 +1803,13 @@ def handle_message(message):
                 target_data = get_user(target_uid)
                 
                 if target_data:
-                    safe_name = html.escape(str(target_data.get('first_name', 'User')))
-                    total_otps = target_data.get('total_otps', 0)
                     msg = (
                         f"<tg-emoji emoji-id=\"5352861489541714456\">👤</tg-emoji> <b>USER PROFILE</b>\n"
                         f"━━━━━━━━━━━━━━━━━\n"
-                        f"<b>Name:</b> {safe_name}\n"
+                        f"<b>Name:</b> {html.escape(target_data['first_name'])}\n"
                         f"<b>ID:</b> <code>{target_uid}</code>\n"
-                        f"<b>Balance:</b> {target_data.get('balance', 0):.2f} BDT\n"
-                        f"<b>Total OTPs:</b> {total_otps}\n"
-                        f"<b>Total Invites:</b> {target_data.get('total_invites', 0)}\n"
+                        f"<b>Balance:</b> {target_data['balance']:.2f} BDT\n"
+                        f"<b>Total Invites:</b> {target_data['total_invites']}\n"
                         f"━━━━━━━━━━━━━━━━━"
                     )
                     if target_msg_id: edit_message(chat_id, target_msg_id, msg, reply_markup=get_user_profile_keyboard(target_uid))
@@ -2001,28 +2006,6 @@ def handle_callback(callback_query):
     if data == "refresh_leaderboard":
         edit_message(chat_id, message_id, get_leaderboard_text(), reply_markup=get_leaderboard_keyboard())
         answer_callback_query(query_id, "Leaderboard Refreshed!")
-        return
-
-    if data.startswith("user_withdraw_"):
-        method = data[14:]
-        user_data = get_user(user_id)
-        bal = user_data.get("balance", 0)
-        min_w = bot_settings.get("min_withdraw", 10.0)
-        
-        if bal < min_w:
-            answer_callback_query(query_id, f"❌ Minimum withdraw is {min_w} BDT. You have {bal:.2f} BDT.", show_alert=True)
-            return
-            
-        user_states[user_id] = {"state": f"waiting_withdraw_amount_{method}", "msg_id": message_id}
-        edit_message(chat_id, message_id, f"💳 <b>Withdraw via {method}</b>\n\n💵 Your Balance: {bal:.2f} BDT\n💬 <b>Enter the amount you want to withdraw:</b>", reply_markup=get_back_only_keyboard())
-        answer_callback_query(query_id)
-        return
-
-    if data == "user_cancel":
-        if user_id in user_states: del user_states[user_id]
-        delete_message(chat_id, message_id)
-        send_message(chat_id, "❌ Action Cancelled.", reply_markup=get_main_keyboard(user_id))
-        answer_callback_query(query_id)
         return
 
     # Admin Operations Only
@@ -2252,6 +2235,21 @@ def handle_callback(callback_query):
     elif data == "close_panel":
         answer_callback_query(query_id, "Closed")
         delete_message(chat_id, message_id)
+        
+    elif data.startswith("user_withdraw_"):
+        method = data[14:]
+        user_data = get_user(user_id)
+        bal = user_data.get("balance", 0)
+        min_w = bot_settings.get("min_withdraw", 10.0)
+        
+        if bal < min_w:
+            answer_callback_query(query_id, f"❌ Minimum withdraw is {min_w} BDT. You have {bal:.2f} BDT.", show_alert=True)
+            return
+            
+        user_states[user_id] = {"state": f"waiting_withdraw_amount_{method}", "msg_id": message_id}
+        edit_message(chat_id, message_id, f"💳 <b>Withdraw via {method}</b>\n\n💵 Your Balance: {bal:.2f} BDT\n💬 <b>Enter the amount you want to withdraw:</b>", reply_markup=get_back_only_keyboard())
+        answer_callback_query(query_id)
+        return
         
     else:
         answer_callback_query(query_id, f"{data} clicked!", show_alert=True)
